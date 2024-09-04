@@ -7,6 +7,7 @@ from dartsort.transform.single_channel_denoiser import SingleChannelWaveformDeno
 
 from dartsort.util.waveform_util import make_channel_index
 from dartsort.util.spikeio import read_waveforms_channel_index
+from dartsort.localize.localize_torch import localize_amplitude_vectors
 
 
 def relocalize_after_clustering(recording, 
@@ -16,17 +17,19 @@ def relocalize_after_clustering(recording,
                                 rec_sd,
                                 geom_ultra,
                                 # extract_radius = 200, 
-                                localize_radius = 100, 
-                                n_spikes_fit_tpca = 20_000,
-                                batch_size=1024, #pca_rank=8,
+                                loc_radius = 100, 
+                                n_spikes_fit_tpca = 10_000,
+                                batch_size=1024, 
+                                model="dipole",
+                                #pca_rank=8,
                                 # loc_workers=4, dtype=np.float32,
                                 ):
-
-"""
-This function takes spikes detected at time `times_samples` on channels `channels`
-It then denoises the spikes (using temporal PCA + neural network), gets their amplitude, and localizes the spikes 
-"""
-
+    
+    """
+    This function takes spikes detected at time `times_samples` on channels `channels`
+    It then denoises the spikes (using temporal PCA + neural network), gets their amplitude, and localizes the spikes 
+    """
+    
     channel_index = make_channel_index(geom,loc_radius)
     c = channel_index.shape[1]
     main_channels = ((geom_ultra[channels][None] - geom[:, None])**2).sum(2).argmin(0)
@@ -73,11 +76,11 @@ It then denoises the spikes (using temporal PCA + neural network), gets their am
             geom,
             main_channels=main_channels[batch_ids],
             channel_index=channel_index,
-            model="dipole", # try both? which one make more sense 
+            model=model, # try both? which one make more sense 
         )      
         loc_vector[batch_ids, 0] = dict_result['x']
         loc_vector[batch_ids, 1] = dict_result['y']
         loc_vector[batch_ids, 2] = dict_result['z_abs']
         
-    return loc_vector, amp_vector
+    return loc_vector, amp_vector*rec_sd
 
