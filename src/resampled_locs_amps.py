@@ -21,6 +21,7 @@ def relocalize_after_clustering(recording,
                                 n_spikes_fit_tpca = 10_000,
                                 batch_size=1024, 
                                 model="dipole",
+                                device=None,
                                 #pca_rank=8,
                                 # loc_workers=4, dtype=np.float32,
                                 ):
@@ -33,7 +34,7 @@ def relocalize_after_clustering(recording,
     channel_index = make_channel_index(geom,loc_radius)
     c = channel_index.shape[1]
     main_channels = ((geom_ultra[channels][None] - geom[:, None])**2).sum(2).argmin(0)
-    denoiser = SingleChannelWaveformDenoiser(channel_index)
+    denoiser = SingleChannelWaveformDenoiser(channel_index).to(device)
 
     n_spikes = len(times_samples)
     print("fitting pca")
@@ -46,10 +47,10 @@ def relocalize_after_clustering(recording,
         main_channels[idx_pca])
 
     _, T, C = wfs.shape
-    wfs = denoiser(torch.tensor(wfs), max_channels=main_channels[idx_pca])
+    wfs = denoiser(torch.tensor(wfs, device=device), max_channels=main_channels[idx_pca])
  
     pca_temporal = BaseTemporalPCA(channel_index, geom=geom)
-    pca_temporal.fit(wfs, main_channels[idx_pca])
+    pca_temporal.fit(wfs.detach().cpu(), main_channels[idx_pca])
 
     # Run denoiser + PCA 
     amp_vector = np.zeros(n_spikes)
@@ -65,22 +66,24 @@ def relocalize_after_clustering(recording,
             channel_index,
             main_channels[batch_ids])
     
-        wfs = denoiser(torch.tensor(wfs), max_channels=main_channels[batch_ids])
+        wfs = denoiser(torch.tensor(wfs, device=device), max_channels=main_channels[batch_ids]).detach().cpu()
         # transform + reverse
         wfs = pca_temporal._transform_in_probe(wfs.permute(0, 2, 1).reshape((-1, T)))
-        wfs = pca_temporal._inverse_transform_in_probe(wfs).reshape((-1, c, T)).permute(0, 2, 1).detach().cpu().numpy()
-        amp_vector[batch_ids] = np.nanmax(wfs.ptp(1), axis=1)
-    
+        wfs = pca_temporal._inverse_transform_in_probe(wfs).reshape((-1, c, T)).permute(0, 2, 1)
         dict_result=localize_amplitude_vectors(
-            wfs.ptp(1),
+            torch.tensor(wfs.max(1).values - wfs.min(1).values, device=device),
             geom,
             main_channels=main_channels[batch_ids],
             channel_index=channel_index,
             model=model, # try both? which one make more sense 
-        )      
-        loc_vector[batch_ids, 0] = dict_result['x']
-        loc_vector[batch_ids, 1] = dict_result['y']
-        loc_vector[batch_ids, 2] = dict_result['z_abs']
+        )
+        
+        loc_vector[batch_ids, 0] = dict_result['x'].detach().cpu().numpy()
+        loc_vector[batch_ids, 1] = dict_result['y'].detach().cpu().numpy()
+        loc_vector[batch_ids, 2] = dict_result['z_abs'].detach().cpu().numpy()
+
+        wfs = wfs.detach().cpu().numpy()
+        amp_vector[batch_ids] = np.nanmax(wfs.ptp(1), axis=1)
         
     return loc_vector, amp_vector*rec_sd
 
