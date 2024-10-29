@@ -87,3 +87,24 @@ def relocalize_after_clustering(recording,
         
     return loc_vector, amp_vector*rec_sd
 
+def spread(
+    loc_vector, 
+    labels,
+):
+    """
+    This function takes locations (or amplitudes), subtract the mean over time and compute the MAD
+    """
+    unit_ids = np.unique(labels)
+    unit_ids = unit_ids[unit_ids>-1]
+    n_units = len(unit_ids)
+
+    z_spread = np.zeros(n_units)
+    x_spread = np.zeros(n_units)
+
+    for unit in unit_ids:
+        # Neew to subtract mean -check what's the best method for that
+        x_spread[unit] = loc_vector[labels==unit, 0]/0.675
+        z_spread[unit] = loc_vector[labels==unit, 2]/0.675
+    return x_spread, z_spread
+
+
