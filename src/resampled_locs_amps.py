@@ -16,19 +16,19 @@ def relocalize_after_clustering(recording,
                                 channels, # UHD max channels 
                                 rec_sd,
                                 geom_ultra,
-                                # extract_radius = 200, 
                                 loc_radius = 100, 
                                 n_spikes_fit_tpca = 10_000,
                                 batch_size=1024, 
                                 model="dipole",
                                 device=None,
-                                #pca_rank=8,
-                                # loc_workers=4, dtype=np.float32,
                                 ):
     
     """
     This function takes spikes detected at time `times_samples` on channels `channels`
-    It then denoises the spikes (using temporal PCA + neural network), gets their amplitude, and localizes the spikes 
+    It then denoises the spikes (using temporal PCA + neural network), gets their amplitude, and localizes the spikes. 
+
+    For consistency across the different patterns, it takes the max channels from the UHD pattern and assigns the closest 
+    channel in the resampled geometry as the max channel.
     """
     
     channel_index = make_channel_index(geom,loc_radius)
