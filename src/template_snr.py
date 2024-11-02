@@ -80,7 +80,10 @@ def compute_template_SNR(
 
     templates_SNR = np.zeros(n_units)
 
+    print("computing main chans")
+
     main_channels = ((geom_ultra[sorting.channels][None] - geom[:, None])**2).sum(2).argmin(0)
+    print("computing SNR")
 
     idx_time = np.flatnonzero(np.logical_and(sorting.times_seconds > slice_snr[0], sorting.times_seconds < slice_snr[1]))
     
@@ -91,85 +94,88 @@ def compute_template_SNR(
         if n_spikes_unit>n_spikes_computation:
             idx_unit = idx_unit[np.random.choice(n_spikes_unit, n_spikes_computation, replace=False)]
 
-        # Is this needed or is it ok to use spikeio.read_full_waveforms? 
-        wfs = read_waveforms_channel_index(
-                recording,
-                sorting.times_samples[idx_unit],
-                channel_index,
-                main_channels[idx_unit],
-                trough_offset_samples=trough_offset_samples,
-                spike_length_samples=spike_length_samples,
-        )
-        
-        n_pitches_shift = get_spike_pitch_shifts(localization_results[idx_unit, 2], geom, times_s = sorting.times_seconds[idx_unit], motion_est=me)
-
-        wfs = get_waveforms_on_static_channels(
-            wfs,
-            geom,
-            main_channels=main_channels[idx_unit],
-            channel_index=channel_index,
-            target_channels=None, #here, all channels
-            n_pitches_shift=n_pitches_shift,
-            registered_geom=registered_geom,
-        )
-
-        random_times = np.random.choice(np.arange(slice_snr[0]*sampling_rate, slice_snr[1]*sampling_rate), n_spikes_computation, replace=False)
-        random_channels = np.random.choice(geom.shape[0], n_spikes_computation, replace=True)
-
-        wfs_random = read_waveforms_channel_index(
-                recording,
-                random_times,
-                channel_index,
-                random_channels,
-                trough_offset_samples=trough_offset_samples,
-                spike_length_samples=spike_length_samples,
-        )
-        
-        n_pitches_shift = get_spike_pitch_shifts(geom[random_channels, 1], geom, times_s = random_times//sampling_rate, motion_est=me)
-
-        wfs_random = get_waveforms_on_static_channels(
-            wfs_random,
-            geom,
-            main_channels=random_channels,
-            channel_index=channel_index,
-            target_channels=None, #here, all channels
-            n_pitches_shift=n_pitches_shift,
-            registered_geom=registered_geom,
-        )
-
-        cmp_unit = 0
-        cmp_random = 0
-
-        dotprod_unit = 0
-        dotprod_random = 0
-        
-        for j, chunk_range in enumerate(chunk_time_ranges_s):
-            temp_chunk_unit = template_data_list[j].templates[unit].flatten()
-            # mc = temp_chunk_unit.ptp(0).argmax()
-            # far_chans = np.flatnonzero(np.sqrt(((registered_geom - registered_geom[mc])**2).sum(1))>200)
-            # temp_chunk_unit[:, far_chans] = 0
-            # temp_chunk_unit = temp_chunk_unit.flatten()
+        if len(idx_unit):
+            # Is this needed or is it ok to use spikeio.read_full_waveforms? 
+            wfs = read_waveforms_channel_index(
+                    recording,
+                    sorting.times_samples[idx_unit],
+                    channel_index,
+                    main_channels[idx_unit],
+                    trough_offset_samples=trough_offset_samples,
+                    spike_length_samples=spike_length_samples,
+            )
             
-            # keep only close channels - radius 200? turn off channels low amp? 
-            # used radius 200 in previous version, doesn't really make a diff? 
-            idx_chunk = np.flatnonzero(np.logical_and(sorting.times_seconds[idx_unit] > chunk_range[0], 
-                                                      sorting.times_seconds[idx_unit] < chunk_range[1]))
+            n_pitches_shift = get_spike_pitch_shifts(localization_results[idx_unit, 2], geom, times_s = sorting.times_seconds[idx_unit], motion_est=me)
+    
+            wfs = get_waveforms_on_static_channels(
+                wfs,
+                geom,
+                main_channels=main_channels[idx_unit],
+                channel_index=channel_index,
+                target_channels=None, #here, all channels
+                n_pitches_shift=n_pitches_shift,
+                registered_geom=registered_geom,
+            )
+    
+            random_times = np.random.choice(np.arange(slice_snr[0]*sampling_rate, slice_snr[1]*sampling_rate), n_spikes_computation, replace=False)
+            random_channels = np.random.choice(geom.shape[0], n_spikes_computation, replace=True)
+    
+            wfs_random = read_waveforms_channel_index(
+                    recording,
+                    random_times,
+                    channel_index,
+                    random_channels,
+                    trough_offset_samples=trough_offset_samples,
+                    spike_length_samples=spike_length_samples,
+            )
             
-            if len(idx_chunk):
-                n_good_chans = (~np.isnan(wfs[idx_chunk][:, 0])).sum(1)
-                dotprodall = np.einsum('ji, i -> j', np.nan_to_num(wfs[idx_chunk], copy=False).reshape((len(idx_chunk), -1)), temp_chunk_unit).sum()/n_good_chans
-                dotprod_unit += dotprodall.sum()
+            n_pitches_shift = get_spike_pitch_shifts(geom[random_channels, 1], geom, times_s = random_times//sampling_rate, motion_est=me)
+    
+            wfs_random = get_waveforms_on_static_channels(
+                wfs_random,
+                geom,
+                main_channels=random_channels,
+                channel_index=channel_index,
+                target_channels=None, #here, all channels
+                n_pitches_shift=n_pitches_shift,
+                registered_geom=registered_geom,
+            )
+    
+            cmp_unit = 0
+            cmp_random = 0
+    
+            dotprod_unit = 0
+            dotprod_random = 0
+            
+            for j, chunk_range in tqdm(enumerate(chunk_time_ranges_s)):
+                temp_chunk_unit = template_data_list[j].templates[unit].flatten()
+                # mc = temp_chunk_unit.ptp(0).argmax()
+                # far_chans = np.flatnonzero(np.sqrt(((registered_geom - registered_geom[mc])**2).sum(1))>200)
+                # temp_chunk_unit[:, far_chans] = 0
+                # temp_chunk_unit = temp_chunk_unit.flatten()
                 
-                cmp_unit+=len(idx_chunk)
+                # keep only close channels - radius 200? turn off channels low amp? 
+                # used radius 200 in previous version, doesn't really make a diff? 
+                idx_chunk = np.flatnonzero(np.logical_and(sorting.times_seconds[idx_unit] > chunk_range[0], 
+                                                          sorting.times_seconds[idx_unit] < chunk_range[1]))
                 
-            idx_chunk = np.flatnonzero(np.logical_and(random_times/sampling_rate > chunk_range[0], 
-                                                      random_times/sampling_rate < chunk_range[1]))
-            if len(idx_chunk):
-                n_good_chans = (~np.isnan(wfs_random[idx_chunk][:, 0])).sum(1)
-                dotprodall = np.einsum('ji, i -> j',  np.nan_to_num(wfs_random[idx_chunk], copy=False).reshape((len(idx_chunk), -1)), temp_chunk_unit).sum()/n_good_chans
-                dotprod_random += np.abs(dotprodall).sum()
-                cmp_random += len(idx_chunk)
-
-        templates_SNR[unit] = (dotprod_unit*cmp_random) / (dotprod_random*cmp_unit)
+                if len(idx_chunk):
+                    n_good_chans = (~np.isnan(wfs[idx_chunk][:, 0])).sum(1)
+                    dotprodall = np.einsum('ji, i -> j', np.nan_to_num(wfs[idx_chunk], copy=False).reshape((len(idx_chunk), -1)), temp_chunk_unit).sum()/n_good_chans
+                    dotprod_unit += dotprodall.sum()
+                    
+                    cmp_unit+=len(idx_chunk)
+                    
+                idx_chunk = np.flatnonzero(np.logical_and(random_times/sampling_rate > chunk_range[0], 
+                                                          random_times/sampling_rate < chunk_range[1]))
+                if len(idx_chunk):
+                    n_good_chans = (~np.isnan(wfs_random[idx_chunk][:, 0])).sum(1)
+                    dotprodall = np.einsum('ji, i -> j',  np.nan_to_num(wfs_random[idx_chunk], copy=False).reshape((len(idx_chunk), -1)), temp_chunk_unit).sum()/n_good_chans
+                    dotprod_random += np.abs(dotprodall).sum()
+                    cmp_random += len(idx_chunk)
+    
+            templates_SNR[unit] = (dotprod_unit*cmp_random) / (dotprod_random*cmp_unit)
+        else:
+            templates_SNR[unit] = np.nan
 
     return templates_SNR
