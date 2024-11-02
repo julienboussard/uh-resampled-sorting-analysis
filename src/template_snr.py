@@ -15,7 +15,7 @@ def compute_template_SNR(
     chunk_time_ranges_s,
     geom,
     geom_ultra,
-    localization_results, # re-localizatipon results for each probe need to be computed beforehand
+    localization_results, # these are the UHD localizations (same locs across all patterns)
     template_config=None,
     template_data_list=None,
     zero_radius=200, # Templates get set to 0 outside of this radius
@@ -35,14 +35,14 @@ def compute_template_SNR(
     
     """
     This function:
-     - computes registered templates over chunks - or only one chunk if enough spikes? 
+     - computes registered templates over chunks (to get templates over time)
      - computes smoothed subchunk templates over time
      - for each unit: 
          - read n_spikes_computation spikes fr in chunk or chunks 
          - read n_spikes_computation random spikes 
          - register all spikes
          - compute scalar product with unit/random wfs
-         - take division of both
+         - take ratio of both
     """
     
     # Get registered templates per chunks
