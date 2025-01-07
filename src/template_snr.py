@@ -27,8 +27,8 @@ def compute_template_SNR(
     template_npz_filename="template_data.npz",
     n_jobs=0,
     device=None,
-    trough_offset_samples=42,
-    spike_length_samples=121,
+    trough_offset_samples=20,
+    spike_length_samples=40,
     slice_snr = [1000, 3000],
     sampling_rate=30_000,
     ):
@@ -116,25 +116,26 @@ def compute_template_SNR(
                 n_pitches_shift=n_pitches_shift,
                 registered_geom=registered_geom,
             )
+
+            main_channels_random = np.random.choice(main_channels[idx_unit], n_spikes_computation, replace=True)
     
             random_times = np.random.choice(np.arange(slice_snr[0]*sampling_rate, slice_snr[1]*sampling_rate), n_spikes_computation, replace=False)
-            random_channels = np.random.choice(geom.shape[0], n_spikes_computation, replace=True)
     
             wfs_random = read_waveforms_channel_index(
                     recording,
                     random_times,
                     channel_index,
-                    random_channels,
+                    main_channels_random,
                     trough_offset_samples=trough_offset_samples,
                     spike_length_samples=spike_length_samples,
             )
             
-            n_pitches_shift = get_spike_pitch_shifts(geom[random_channels, 1], geom, times_s = random_times//sampling_rate, motion_est=me)
+            n_pitches_shift = get_spike_pitch_shifts(geom[main_channels_random, 1], geom, times_s = random_times//sampling_rate, motion_est=me)
     
             wfs_random = get_waveforms_on_static_channels(
                 wfs_random,
                 geom,
-                main_channels=random_channels,
+                main_channels=main_channels_random,
                 channel_index=channel_index,
                 target_channels=None, #here, all channels
                 n_pitches_shift=n_pitches_shift,
@@ -161,18 +162,20 @@ def compute_template_SNR(
                 
                 if len(idx_chunk):
                     n_good_chans = (~np.isnan(wfs[idx_chunk][:, 0])).sum(1)
-                    dotprodall = np.einsum('ji, i -> j', np.nan_to_num(wfs[idx_chunk], copy=False).reshape((len(idx_chunk), -1)), temp_chunk_unit).sum()/n_good_chans
-                    dotprod_unit += dotprodall.sum()
-                    
-                    cmp_unit+=len(idx_chunk)
+                    if np.any(n_good_chans):
+                        dotprodall = np.einsum('ji, i -> j', np.nan_to_num(wfs[idx_chunk], copy=False).reshape((len(idx_chunk), -1)), temp_chunk_unit).sum()/n_good_chans
+                        dotprod_unit += dotprodall.sum()
+                        
+                        cmp_unit+=len(idx_chunk)
                     
                 idx_chunk = np.flatnonzero(np.logical_and(random_times/sampling_rate > chunk_range[0], 
                                                           random_times/sampling_rate < chunk_range[1]))
                 if len(idx_chunk):
                     n_good_chans = (~np.isnan(wfs_random[idx_chunk][:, 0])).sum(1)
-                    dotprodall = np.einsum('ji, i -> j',  np.nan_to_num(wfs_random[idx_chunk], copy=False).reshape((len(idx_chunk), -1)), temp_chunk_unit).sum()/n_good_chans
-                    dotprod_random += np.abs(dotprodall).sum()
-                    cmp_random += len(idx_chunk)
+                    if np.any(n_good_chans):
+                        dotprodall = np.einsum('ji, i -> j',  np.nan_to_num(wfs_random[idx_chunk], copy=False).reshape((len(idx_chunk), -1)), temp_chunk_unit).sum()/n_good_chans
+                        dotprod_random += np.abs(dotprodall).sum()
+                        cmp_random += len(idx_chunk)
     
             templates_SNR[unit] = (dotprod_unit*cmp_random) / (dotprod_random*cmp_unit)
         else:
